@@ -102,6 +102,94 @@ Press `?` or `F1` anywhere in the app (or click the keyboard icon in the sidebar
 
 ---
 
+## Custom Presets (JSON)
+
+You can save, export, or import custom presets via **Preset → Manage / JSON** in any workspace (**Video**, **Image**, or **Audio**). Imported JSON supports either a **single preset object** or an **array of presets**, and partial `options` fields automatically fall back to defaults.
+
+<details>
+<summary>Example JSON templates (Video, Image, Audio)</summary>
+
+```json
+[
+  {
+    "id": "custom-video-whatsapp-720p",
+    "name": "WhatsApp Share 720p",
+    "description": "Compact 720p MP4 H.264 CRF 26",
+    "type": "video",
+    "builtIn": false,
+    "options": {
+      "outputFormat": "mp4",
+      "videoCodec": "h264",
+      "crf": 26,
+      "resolution": "720p",
+      "encoderPreset": "fast",
+      "namingPattern": "{name}_compressed.{ext}"
+    }
+  },
+  {
+    "id": "custom-image-social-webp",
+    "name": "Social Media WebP 1200px",
+    "description": "Resize width to 1200px and convert to WebP quality 80",
+    "type": "image",
+    "builtIn": false,
+    "options": {
+      "outputFormat": "webp",
+      "quality": 80,
+      "resizeMode": "dimensions",
+      "targetWidth": 1200,
+      "metadataMode": "keep-orientation",
+      "namingPattern": "{name}_converted.{ext}"
+    }
+  },
+  {
+    "id": "custom-audio-podcast-mp3",
+    "name": "Podcast MP3 128k",
+    "description": "Compact MP3 128 kbps 44.1kHz",
+    "type": "audio",
+    "builtIn": false,
+    "options": {
+      "outputFormat": "mp3",
+      "bitrateKbps": 128,
+      "sampleRate": 44100,
+      "namingPattern": "{name}_converted.{ext}"
+    }
+  }
+]
+```
+
+</details>
+
+<details>
+<summary>Supported <code>options</code> fields reference</summary>
+
+- **Video (`type: "video"`)**:
+  - `outputFormat`: `"mp4" | "webm" | "mkv" | "mov" | "gif" | "mp3" | "aac"`
+  - `videoCodec`: `"h264" | "h265" | "vp9" | "av1" | "none"`
+  - `rateControl`: `"crf" | "bitrate" | "two-pass"`, `crf` (number), `targetBitrateKbps` (number)
+  - `encoderPreset`: `"ultrafast" | "superfast" | "veryfast" | "faster" | "fast" | "medium" | "slow" | "slower" | "veryslow" | "placebo"`
+  - `hwAccel` (boolean)
+  - `resolution`: `"original" | "1080p" | "720p" | "480p" | "custom"`, `customWidth`, `customHeight`
+  - `fps`: `"original" | 60 | 30 | 24 | "custom"`, `customFps`
+  - `rotate`: `0 | 90 | 180 | 270`, `flipHorizontal`, `flipVertical`
+  - `trimStartSec`, `trimEndSec`, `cropX`, `cropY`, `cropWidth`, `cropHeight`, `extractThumbnailSec`
+  - `subtitleMode`: `"keep" | "strip" | "burn-in" | "extract-srt"`, `subtitleTrackIndex`, `externalSrtPath`
+  - `stripMetadata` (boolean), `outputDir`, `namingPattern`, `overwriteExisting` (boolean)
+- **Image (`type: "image"`)**:
+  - `outputFormat`: `"original" | "jpg" | "png" | "webp" | "avif" | "gif" | "tiff"`
+  - `quality` (1–100), `pngOptimizationLevel` (1–6), `pngZopfli`, `progressiveJpeg`, `effort`, `lossless`
+  - `resizeMode`: `"none" | "dimensions" | "percentage"`, `targetWidth`, `targetHeight`, `resizePercentage`, `keepAspectRatio`
+  - `rotate`: `0 | 90 | 180 | 270`, `flipHorizontal`, `flipVertical`, `grayscale`
+  - `cropX`, `cropY`, `cropWidth`, `cropHeight`
+  - `metadataMode`: `"keep-all" | "strip-all" | "keep-orientation"`, `outputDir`, `namingPattern`, `overwriteExisting`
+- **Audio (`type: "audio"`)**:
+  - `outputFormat`: `"original" | "mp3" | "aac" | "m4a" | "wav" | "flac" | "ogg"`
+  - `bitrateKbps` (number), `sampleRate`: `"original" | 44100 | 48000`, `channels`: `"original" | "mono" | "stereo"`
+  - `trimStartSec`, `trimEndSec`, `stripMetadata` (boolean), `outputDir`, `namingPattern`, `overwriteExisting`
+
+</details>
+
+---
+
 ## Attribution & Licenses
 
 - **FFmpeg & FFprobe**: Downloaded externally on first run into the application's `AppData` directory (verified via SHA-256 checksum) or imported from a local binary. FFmpeg is licensed under the LGPL/GPL depending on build configuration.
