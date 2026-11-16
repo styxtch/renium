@@ -181,7 +181,7 @@ export function AppPreferencesModal() {
         </div>
 
         <div className="pt-2 border-t border-border text-xs text-muted space-y-1">
-          <div className="font-medium text-secondary">About Renium v1.0.0</div>
+          <div className="font-medium text-secondary">About Renium v1.0.1</div>
           <p>
             Desktop offline-first media compressor powered by Rust, Tauri 2, OxiPNG, image-rs, and
             FFmpeg (LGPL/GPL components downloaded externally at first run).

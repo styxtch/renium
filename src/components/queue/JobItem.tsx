@@ -78,18 +78,33 @@ export function JobItem({
     job.outputSize != null &&
     (job.sizeLargerWarning || job.outputSize >= job.originalSize);
 
-  const thumbSrc =
-    job.type === "image" && tauri.isTauriRuntime()
-      ? convertFileSrc(
-          job.status === "completed" && job.outputPath ? job.outputPath : job.inputPath
-        )
-      : null;
-
   const isAudioOutput =
     job.type === "audio" ||
     (job.type === "video" &&
       "outputFormat" in job.options &&
       (job.options.outputFormat === "mp3" || job.options.outputFormat === "aac"));
+
+  const isGifOutput =
+    job.status === "completed" &&
+    !!job.outputPath &&
+    job.outputPath.toLowerCase().endsWith(".gif");
+
+  const thumbPath =
+    job.status === "completed" && job.outputPath ? job.outputPath : job.inputPath;
+
+  const imgThumbSrc =
+    (job.type === "image" || isGifOutput) && tauri.isTauriRuntime()
+      ? convertFileSrc(thumbPath)
+      : null;
+
+  const videoThumbSrc =
+    job.type === "video" && !isGifOutput && tauri.isTauriRuntime()
+      ? convertFileSrc(
+          job.status === "completed" && job.outputPath && !isAudioOutput
+            ? job.outputPath
+            : job.inputPath
+        )
+      : null;
 
   const fileIcon =
     isAudioOutput ? (
@@ -278,12 +293,22 @@ export function JobItem({
               <GripVertical className="h-4 w-4" />
             </button>
           )}
-          {thumbSrc && !thumbFailed ? (
+          {imgThumbSrc && !thumbFailed ? (
             <img
-              src={thumbSrc}
+              src={imgThumbSrc}
               alt={job.fileName}
               onError={() => setThumbFailed(true)}
               className="mt-0.5 h-10 w-10 rounded-sm object-cover border border-border shrink-0 bg-elevated"
+            />
+          ) : videoThumbSrc && !thumbFailed ? (
+            <video
+              src={`${videoThumbSrc}#t=0.1`}
+              muted
+              playsInline
+              preload="metadata"
+              onError={() => setThumbFailed(true)}
+              aria-label={job.fileName}
+              className="mt-0.5 h-10 w-10 rounded-sm object-cover border border-border shrink-0 bg-elevated pointer-events-none"
             />
           ) : (
             <div

@@ -270,7 +270,7 @@ export const useJobStore = create<JobState>((set, get) => ({
           set({
             noticeTone: "warning",
             mismatchOffer: { targetTab, paths: otherPaths },
-            notice: `Peringatan: File tersebut tidak dapat dimasukkan ke tab ${currentLabel}. Gunakan tab ${tabLabel} untuk memproses file ini.`,
+            notice: `Warning: Those files cannot be added to the ${currentLabel} tab. Use the ${tabLabel} tab to process them.`,
           });
           return;
         }
@@ -279,10 +279,10 @@ export const useJobStore = create<JobState>((set, get) => ({
           mismatchOffer: null,
           notice:
             mediaType === "video"
-              ? "Format file tidak didukung di tab Video (mendukung MP4, MKV, MOV, AVI, WebM, FLV, TS, M4V, WMV, 3GP)."
+              ? "Unsupported file format for the Video tab (supports MP4, MKV, MOV, AVI, WebM, FLV, TS, M4V, WMV, 3GP)."
               : mediaType === "image"
-                ? "Format file tidak didukung di tab Image (mendukung JPG, PNG, WebP, AVIF, GIF, BMP, TIFF)."
-                : "Format file tidak didukung di tab Audio (mendukung MP3, WAV, FLAC, M4A, AAC, OGG, OPUS, WMA, AIFF).",
+                ? "Unsupported file format for the Image tab (supports JPG, PNG, WebP, AVIF, GIF, BMP, TIFF)."
+                : "Unsupported file format for the Audio tab (supports MP3, WAV, FLAC, M4A, AAC, OGG, OPUS, WMA, AIFF).",
         });
         return;
       }
@@ -294,7 +294,7 @@ export const useJobStore = create<JobState>((set, get) => ({
           [key]: [...state[key], ...added],
           noticeTone: "warning",
           mismatchOffer: { targetTab, paths: otherPaths },
-          notice: `${added.length} file ditambahkan, tetapi ${otherPaths.length} file dilewati karena tipe media berbeda.`,
+          notice: `${added.length} file(s) added, but ${otherPaths.length} file(s) were skipped because they belong to a different media type.`,
         }));
       } else {
         set((state) => ({

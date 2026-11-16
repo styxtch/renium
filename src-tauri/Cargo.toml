@@ -1,6 +1,6 @@
 [package]
 name = "renium"
-version = "1.0.0"
+version = "1.0.1"
 description = "Offline-first desktop media converter and compressor for video, image, and audio"
 authors = ["Renium"]
 edition = "2021"

@@ -28,7 +28,7 @@ All media processing runs 100% locally on your machine — no cloud uploads, no 
 ## Tech Stack & Architecture
 
 ```text
-MediaConverter/
+Renium/
 ├── src/                        # React + TypeScript + Tailwind frontend
 │   ├── components/             # Layout, Queue, Preview, Settings, UI Primitives
 │   ├── lib/                    # Tauri IPC wrappers, keyboard shortcuts, formatting

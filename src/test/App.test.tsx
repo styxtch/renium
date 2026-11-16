@@ -375,7 +375,7 @@ describe("Renium UI & Workflows", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(
-        /tidak dapat dimasukkan ke tab Image\. Gunakan tab Video/i
+        /cannot be added to the Image tab\. Use the Video tab/i
       );
     });
 
