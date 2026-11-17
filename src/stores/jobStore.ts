@@ -469,16 +469,11 @@ export const useJobStore = create<JobState>((set, get) => ({
     await tauri.keepOriginal(id);
     const key = jobsKey(mediaType);
     set((state) => ({
-      [key]: state[key].map((j) =>
-        j.id === id
-          ? {
-              ...j,
-              outputPath: undefined,
-              outputSize: undefined,
-              sizeLargerWarning: false,
-            }
-          : j
-      ),
+      [key]: state[key].filter((j) => j.id !== id),
+      selectedJobId: state.selectedJobId === id ? null : state.selectedJobId,
+    }));
+    useHistoryStore.setState((state) => ({
+      items: state.items.filter((item) => item.id !== id),
     }));
   },
 }));

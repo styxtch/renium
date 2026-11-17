@@ -222,6 +222,7 @@ describe("Renium UI & Workflows", () => {
     await waitFor(() => {
       expect(tauri.keepOriginal).toHaveBeenCalledWith("img-2");
     });
+    expect(screen.queryByText("photo.png")).not.toBeInTheDocument();
   });
 
   it("toggles between Dark and Light themes", async () => {

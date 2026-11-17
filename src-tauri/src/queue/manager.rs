@@ -1064,9 +1064,11 @@ impl QueueManager {
     }
 
     pub async fn keep_original(&self, id: &str) -> Result<(), AppError> {
+        let mut removed = false;
         for mt in [MediaType::Video, MediaType::Image, MediaType::Audio] {
             let mut guard = self.queue_mutex(mt).lock().await;
-            if let Some(job) = guard.iter_mut().find(|j| j.id == id) {
+            if let Some(pos) = guard.iter().position(|j| j.id == id) {
+                let job = guard.remove(pos);
                 if let Some(ref out_path) = job.output_path {
                     if out_path != &job.input_path {
                         let p = PathBuf::from(out_path);
@@ -1075,11 +1077,19 @@ impl QueueManager {
                         }
                     }
                 }
-                job.output_path = None;
-                job.output_size = None;
-                job.size_larger_warning = Some(false);
-                return Ok(());
+                removed = true;
+                break;
             }
+        }
+        if let Ok(mut hist) = self.history.write() {
+            let before = hist.len();
+            hist.retain(|h| h.id != id);
+            if hist.len() != before {
+                let _ = save_history(&self.storage, &hist);
+            }
+        }
+        if removed {
+            self.persist_recovery().await;
         }
         Ok(())
     }
