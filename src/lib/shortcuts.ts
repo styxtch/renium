@@ -38,12 +38,12 @@ export function useGlobalShortcuts() {
       }
       if (mod && e.key === "2") {
         e.preventDefault();
-        store.setActiveTab("image");
+        store.setActiveTab("audio");
         return;
       }
       if (mod && e.key === "3") {
         e.preventDefault();
-        store.setActiveTab("audio");
+        store.setActiveTab("image");
         return;
       }
       if (mod && e.key === "4") {

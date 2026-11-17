@@ -26,6 +26,7 @@ export function App() {
   }, [theme, themeStyle]);
 
   useEffect(() => {
+    let disposed = false;
     let cleanup: (() => void) | undefined;
 
     void useSettingsStore.getState().initSettingsAndFfmpeg();
@@ -34,10 +35,15 @@ export function App() {
       .getState()
       .initQueuesAndListeners()
       .then((fn) => {
-        cleanup = fn;
+        if (disposed) {
+          fn();
+        } else {
+          cleanup = fn;
+        }
       });
 
     return () => {
+      disposed = true;
       cleanup?.();
     };
   }, []);

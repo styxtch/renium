@@ -119,6 +119,12 @@ fn select_video_encoder(
 fn build_video_filters(options: &VideoOptions) -> Vec<String> {
     let mut filters = Vec::new();
 
+    match options.deinterlace.as_deref() {
+        Some("yadif") => filters.push("yadif".to_string()),
+        Some("bwdif") => filters.push("bwdif".to_string()),
+        _ => {}
+    }
+
     if let (Some(cw), Some(ch)) = (options.crop_width, options.crop_height) {
         if cw > 0 && ch > 0 {
             let cx = options.crop_x.unwrap_or(0);
@@ -138,6 +144,19 @@ fn build_video_filters(options: &VideoOptions) -> Vec<String> {
                 filters.push(format!("scale={w}:{h}"));
             }
         }
+        _ => {}
+    }
+
+    match options.denoise.as_deref() {
+        Some("light") => filters.push("hqdn3d=1.5:1.5:6:6".to_string()),
+        Some("medium") => filters.push("hqdn3d=3:3:8:8".to_string()),
+        Some("strong") => filters.push("hqdn3d=6:6:12:12".to_string()),
+        _ => {}
+    }
+
+    match options.sharpen.as_deref() {
+        Some("light") => filters.push("unsharp=5:5:0.5:5:5:0.0".to_string()),
+        Some("medium") => filters.push("unsharp=5:5:1.0:5:5:0.0".to_string()),
         _ => {}
     }
 
@@ -173,6 +192,13 @@ fn build_video_filters(options: &VideoOptions) -> Vec<String> {
             let escaped = srt_path.replace('\\', "/").replace(':', "\\:");
             filters.push(format!("subtitles='{escaped}'"));
         }
+    }
+
+    if options.color_space.as_deref() == Some("hdr-to-sdr") {
+        filters.push(
+            "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
+                .to_string(),
+        );
     }
 
     filters
@@ -360,7 +386,44 @@ pub fn build_ffmpeg_args(
         if encoder == "libx264" || encoder == "libx265" {
             args.push("-preset".to_string());
             args.push(options.encoder_preset.clone());
+            if let Some(tune) = options.encoder_tune.as_deref().filter(|t| *t != "none") {
+                args.push("-tune".to_string());
+                args.push(tune.to_string());
+            }
         }
+    }
+
+    if let Some(profile) = options.encoder_profile.as_deref().filter(|p| *p != "auto") {
+        args.push("-profile:v".to_string());
+        args.push(profile.to_string());
+    }
+
+    if let Some(pix_fmt) = options.pix_fmt.as_deref().filter(|p| *p != "auto") {
+        args.push("-pix_fmt".to_string());
+        args.push(pix_fmt.to_string());
+    }
+
+    if matches!(options.color_space.as_deref(), Some("bt709") | Some("hdr-to-sdr")) {
+        args.extend([
+            "-colorspace".to_string(),
+            "bt709".to_string(),
+            "-color_primaries".to_string(),
+            "bt709".to_string(),
+            "-color_trc".to_string(),
+            "bt709".to_string(),
+        ]);
+    }
+
+    match options.fps_mode.as_deref() {
+        Some("cfr") => {
+            args.push("-fps_mode".to_string());
+            args.push("cfr".to_string());
+        }
+        Some("vfr") => {
+            args.push("-fps_mode".to_string());
+            args.push("vfr".to_string());
+        }
+        _ => {}
     }
 
     if pass == Some(1) {
@@ -375,14 +438,62 @@ pub fn build_ffmpeg_args(
     }
 
     // Audio & subtitles for final pass
-    if ext == "webm" {
-        args.push("-c:a".to_string());
-        args.push("libopus".to_string());
-    } else {
-        args.push("-c:a".to_string());
-        args.push("aac".to_string());
-        args.push("-b:a".to_string());
-        args.push("128k".to_string());
+    let audio_codec = options
+        .audio_codec
+        .as_deref()
+        .unwrap_or(if ext == "webm" { "opus" } else { "aac" });
+
+    if audio_codec != "none" {
+        if let Some(track_idx) = options.audio_track_index {
+            args.extend(["-map".to_string(), "0:v:0".to_string()]);
+            args.extend(["-map".to_string(), format!("0:a:{track_idx}?")]);
+            if options.subtitle_mode == "keep" && (ext == "mkv" || ext == "mp4" || ext == "mov") {
+                args.extend(["-map".to_string(), "0:s?".to_string()]);
+            }
+        }
+    }
+
+    let audio_kbps = options.audio_bitrate_kbps.unwrap_or(128);
+    match audio_codec {
+        "none" => {
+            args.push("-an".to_string());
+        }
+        "copy" => {
+            args.push("-c:a".to_string());
+            args.push("copy".to_string());
+        }
+        "opus" => {
+            args.push("-c:a".to_string());
+            args.push("libopus".to_string());
+            args.push("-b:a".to_string());
+            args.push(format!("{audio_kbps}k"));
+        }
+        "mp3" => {
+            args.push("-c:a".to_string());
+            args.push("libmp3lame".to_string());
+            args.push("-b:a".to_string());
+            args.push(format!("{audio_kbps}k"));
+        }
+        _ => {
+            args.push("-c:a".to_string());
+            args.push("aac".to_string());
+            args.push("-b:a".to_string());
+            args.push(format!("{audio_kbps}k"));
+        }
+    }
+
+    if audio_codec != "none" && audio_codec != "copy" {
+        match options.audio_channels.as_deref() {
+            Some("mono") => {
+                args.push("-ac".to_string());
+                args.push("1".to_string());
+            }
+            Some("stereo") => {
+                args.push("-ac".to_string());
+                args.push("2".to_string());
+            }
+            _ => {}
+        }
     }
 
     if options.subtitle_mode == "strip" || options.subtitle_mode == "burn-in" {
@@ -402,7 +513,12 @@ pub fn build_ffmpeg_args(
         args.push("-1".to_string());
     }
 
-    if ext == "mp4" || ext == "mov" {
+    if options.preserve_chapters == Some(false) {
+        args.push("-map_chapters".to_string());
+        args.push("-1".to_string());
+    }
+
+    if (ext == "mp4" || ext == "mov") && options.fast_start.unwrap_or(true) {
         args.push("-movflags".to_string());
         args.push("+faststart".to_string());
     }
@@ -432,7 +548,7 @@ fn parse_progress_line(line: &str) -> Option<u64> {
     None
 }
 
-pub(crate) async fn run_ffmpeg_once<F>(
+pub(crate) async fn run_ffmpeg_once<F, L>(
     ffmpeg_path: &Path,
     args: &[String],
     job_id: &str,
@@ -441,9 +557,11 @@ pub(crate) async fn run_ffmpeg_once<F>(
     pass_scale: f64,
     registry: &Arc<ActiveProcessRegistry>,
     on_progress: &mut F,
+    on_log: &mut L,
 ) -> Result<(), (i32, String)>
 where
     F: FnMut(f64, Option<u64>),
+    L: FnMut(&str),
 {
     let mut cmd = Command::new(ffmpeg_path);
     cmd.args(args)
@@ -467,6 +585,16 @@ where
     if let Some(err_stream) = stderr {
         let mut lines = BufReader::new(err_stream).lines();
         while let Ok(Some(line)) = lines.next_line().await {
+            if !line.trim().is_empty()
+                && !line.starts_with("stream_")
+                && !line.starts_with("out_time_")
+                && !line.starts_with("total_size=")
+                && !line.starts_with("dup_frames=")
+                && !line.starts_with("drop_frames=")
+                && !line.starts_with("progress=")
+            {
+                on_log(&line);
+            }
             if let Some(current_ms) = parse_progress_line(&line) {
                 if let Some(total_ms) = duration_ms.filter(|&d| d > 0) {
                     let ratio = (current_ms as f64 / total_ms as f64).clamp(0.0, 1.0);
@@ -512,7 +640,7 @@ where
     }
 }
 
-pub async fn process_video_job<F>(
+pub async fn process_video_job<F, L>(
     job_id: &str,
     ffmpeg_path: &Path,
     input_path: &Path,
@@ -522,9 +650,11 @@ pub async fn process_video_job<F>(
     probe: Option<&MediaProbeInfo>,
     registry: &Arc<ActiveProcessRegistry>,
     mut on_progress: F,
+    mut on_log: L,
 ) -> Result<VideoProcessResult, AppError>
 where
     F: FnMut(f64, Option<u64>),
+    L: FnMut(&str),
 {
     if !input_path.is_file() {
         return Err(AppError::IoError(format!(
@@ -583,6 +713,7 @@ where
             50.0,
             registry,
             &mut on_progress,
+            &mut on_log,
         )
         .await;
 
@@ -612,6 +743,7 @@ where
             50.0,
             registry,
             &mut on_progress,
+            &mut on_log,
         )
         .await;
         let _ = std::fs::remove_dir_all(&temp_dir);
@@ -635,12 +767,14 @@ where
             100.0,
             registry,
             &mut on_progress,
+            &mut on_log,
         )
         .await;
 
         // Graceful fallback to software encoder if HW accel fails
         match attempt {
             Err(_) if options.hw_accel => {
+                on_log("[renium] Hardware encoder failed, falling back to CPU software encoder...");
                 cleanup_part_file(&part_path);
                 let sw_args = build_ffmpeg_args(
                     input_path,
@@ -660,6 +794,7 @@ where
                     100.0,
                     registry,
                     &mut on_progress,
+                    &mut on_log,
                 )
                 .await
             }
@@ -1237,5 +1372,50 @@ mod tests {
         assert_eq!(effective_trimmed_duration_ms(Some(30_000), &opts), Some(10_000));
         let (pw, ph) = compute_video_output_dimensions(1920, 1080, &opts);
         assert_eq!((pw, ph), (854, 480));
+    }
+
+    #[test]
+    fn builds_handbrake_advanced_filters_audio_and_chapters_args() {
+        let caps = Capabilities::default();
+        let mut opts = VideoOptions::default();
+        opts.deinterlace = Some("yadif".into());
+        opts.denoise = Some("light".into());
+        opts.sharpen = Some("medium".into());
+        opts.encoder_profile = Some("high".into());
+        opts.encoder_tune = Some("film".into());
+        opts.pix_fmt = Some("yuv420p".into());
+        opts.fps_mode = Some("cfr".into());
+        opts.audio_codec = Some("opus".into());
+        opts.audio_bitrate_kbps = Some(192);
+        opts.audio_channels = Some("stereo".into());
+        opts.audio_track_index = Some(1);
+        opts.color_space = Some("hdr-to-sdr".into());
+        opts.preserve_chapters = Some(false);
+        opts.fast_start = Some(false);
+
+        let args = build_ffmpeg_args(
+            Path::new("input.mp4"),
+            Path::new("out.mp4.part"),
+            &opts,
+            &caps,
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        assert!(args[vf_idx + 1].starts_with("yadif,hqdn3d=1.5:1.5:6:6,unsharp=5:5:1.0:5:5:0.0,zscale="));
+        assert!(args.windows(2).any(|w| w == ["-colorspace", "bt709"]));
+        assert!(args.windows(2).any(|w| w == ["-map", "0:a:1?"]));
+        assert!(args.windows(2).any(|w| w == ["-profile:v", "high"]));
+        assert!(args.windows(2).any(|w| w == ["-tune", "film"]));
+        assert!(args.windows(2).any(|w| w == ["-pix_fmt", "yuv420p"]));
+        assert!(args.windows(2).any(|w| w == ["-fps_mode", "cfr"]));
+        assert!(args.windows(2).any(|w| w == ["-c:a", "libopus"]));
+        assert!(args.windows(2).any(|w| w == ["-b:a", "192k"]));
+        assert!(args.windows(2).any(|w| w == ["-ac", "2"]));
+        assert!(args.windows(2).any(|w| w == ["-map_chapters", "-1"]));
+        assert!(!args.iter().any(|a| a == "-movflags"));
     }
 }

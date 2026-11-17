@@ -42,6 +42,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     hwAccel: true,
     maxConcurrentVideoJobs: 1,
     maxConcurrentImageJobs: 4,
+    maxConcurrentAudioJobs: 2,
     checkUpdates: false,
     autoClearCompleted: false,
   },

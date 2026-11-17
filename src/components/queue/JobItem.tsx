@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  ExternalLink,
   Eye,
   Film,
   FolderOpen,
@@ -69,6 +70,7 @@ export function JobItem({
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [copied, setCopied] = useState(false);
   const [thumbFailed, setThumbFailed] = useState(false);
+  const [confirmKeepOriginal, setConfirmKeepOriginal] = useState(false);
 
   const isSelected = selectedJobId === job.id;
   const isChecked = job.status !== "queued" || !uncheckedJobIds[job.id];
@@ -323,10 +325,25 @@ export function JobItem({
             </div>
           )}
           <div className="min-w-0 space-y-0.5">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-primary truncate" title={job.inputPath}>
                 {job.fileName}
               </span>
+              {(() => {
+                const outputFileName =
+                  job.status === "completed" && job.outputPath
+                    ? (job.outputPath.split(/[\\/]/).pop() ?? job.fileName)
+                    : null;
+                if (!outputFileName || outputFileName === job.fileName) return null;
+                return (
+                  <span
+                    className="text-xs font-mono text-accent truncate"
+                    title={job.outputPath}
+                  >
+                    → {outputFileName}
+                  </span>
+                );
+              })()}
               {statusBadge()}
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-muted">
@@ -394,15 +411,26 @@ export function JobItem({
             </>
           )}
           {job.status === "queued" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => void removeJob(job.id, job.type)}
-              aria-label={`Remove ${job.fileName}`}
-              title="Remove from queue"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void tauri.openOutputFile(job.inputPath)}
+                aria-label={`Open ${job.fileName}`}
+                title="Open file"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void removeJob(job.id, job.type)}
+                aria-label={`Remove ${job.fileName}`}
+                title="Remove from queue"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </>
           )}
 
           {job.status === "processing" && (
@@ -457,14 +485,26 @@ export function JobItem({
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => void keepOriginal(job.id, job.type)}
-                  title="Delete larger compressed file and keep original"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmKeepOriginal(true);
+                  }}
+                  title="Delete larger output file and keep original"
                 >
                   Keep Original
                 </Button>
               )}
               {job.outputPath && (
                 <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void tauri.openOutputFile(job.outputPath!)}
+                    aria-label="Open output file"
+                    title="Open file"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -565,6 +605,53 @@ export function JobItem({
               {job.error}
             </pre>
           )}
+        </div>
+      )}
+
+      {confirmKeepOriginal && job.outputPath && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm Keep Original"
+          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div className="w-full max-w-md rounded-md border border-border bg-surface shadow-modal p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+              <div className="space-y-2 min-w-0">
+                <h3 className="text-sm font-semibold text-primary">
+                  Delete Output &amp; Keep Original?
+                </h3>
+                <p className="text-xs text-secondary">
+                  This will permanently delete the newly created output file from disk and keep
+                  your original file:
+                </p>
+                <p className="font-mono text-[11px] text-primary break-all bg-elevated px-2.5 py-1.5 rounded-sm border border-border">
+                  {job.outputPath}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setConfirmKeepOriginal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  setConfirmKeepOriginal(false);
+                  void keepOriginal(job.id, job.type);
+                }}
+              >
+                Delete Output
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

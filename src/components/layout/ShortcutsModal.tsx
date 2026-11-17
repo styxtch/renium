@@ -16,8 +16,8 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: "Navigation & General",
     items: [
       { keys: ["Ctrl", "1"], description: "Switch to Video workspace" },
-      { keys: ["Ctrl", "2"], description: "Switch to Image workspace" },
-      { keys: ["Ctrl", "3"], description: "Switch to Audio workspace" },
+      { keys: ["Ctrl", "2"], description: "Switch to Audio workspace" },
+      { keys: ["Ctrl", "3"], description: "Switch to Image workspace" },
       { keys: ["Ctrl", "4"], description: "Switch to History view" },
       { keys: ["Ctrl", ","], description: "Open App Preferences" },
       { keys: ["?", "/", "F1"], description: "Toggle Keyboard Shortcuts" },

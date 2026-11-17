@@ -77,18 +77,18 @@ export function TopNav() {
       running: runningVideo,
     },
     {
-      id: "image",
-      label: "Image",
-      icon: <ImageIcon className="h-4 w-4" />,
-      count: activeImageCount,
-      running: runningImage,
-    },
-    {
       id: "audio",
       label: "Audio",
       icon: <Music className="h-4 w-4" />,
       count: activeAudioCount,
       running: runningAudio,
+    },
+    {
+      id: "image",
+      label: "Image",
+      icon: <ImageIcon className="h-4 w-4" />,
+      count: activeImageCount,
+      running: runningImage,
     },
     {
       id: "history",
@@ -122,7 +122,7 @@ export function TopNav() {
                 <span className="font-semibold text-sm tracking-tight text-primary">
                   Renium
                 </span>
-                <span className="text-[11px] font-mono text-muted">v1.0</span>
+                <span className="text-[11px] font-mono text-muted">v1.1.0</span>
               </div>
             )}
           </div>

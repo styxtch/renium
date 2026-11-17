@@ -19,6 +19,13 @@ export interface SubtitleTrack {
   title?: string;
 }
 
+export interface AudioTrack {
+  index: number;
+  codec?: string;
+  language?: string;
+  title?: string;
+}
+
 export interface MediaProbeInfo {
   durationMs?: number;
   width?: number;
@@ -26,6 +33,7 @@ export interface MediaProbeInfo {
   fps?: number;
   videoCodec?: string;
   audioCodec?: string;
+  audioTracks?: AudioTrack[];
   subtitleTracks?: SubtitleTrack[];
 }
 
@@ -66,6 +74,20 @@ export interface VideoOptions {
   subtitleTrackIndex?: number;
   externalSrtPath?: string;
   stripMetadata: boolean;
+  audioCodec?: "aac" | "opus" | "mp3" | "copy" | "none";
+  audioBitrateKbps?: number;
+  audioChannels?: "original" | "stereo" | "mono";
+  audioTrackIndex?: number;
+  colorSpace?: "auto" | "bt709" | "hdr-to-sdr";
+  encoderProfile?: "auto" | "main" | "high" | "main10";
+  encoderTune?: "none" | "film" | "animation" | "grain" | "fastdecode";
+  pixFmt?: "auto" | "yuv420p" | "yuv420p10le";
+  deinterlace?: "none" | "yadif" | "bwdif";
+  denoise?: "none" | "light" | "medium" | "strong";
+  sharpen?: "none" | "light" | "medium";
+  preserveChapters?: boolean;
+  fpsMode?: "auto" | "cfr" | "vfr";
+  fastStart?: boolean;
   outputDir?: string;
   namingPattern: string;
   overwriteExisting: boolean;
@@ -99,13 +121,17 @@ export interface ImageOptions {
 }
 
 export interface AudioOptions {
-  outputFormat: "original" | "mp3" | "aac" | "m4a" | "wav" | "flac" | "ogg";
+  outputFormat: "original" | "mp3" | "aac" | "m4a" | "wav" | "flac" | "ogg" | "opus";
   bitrateKbps: number;
   sampleRate: "original" | 44100 | 48000;
   channels: "original" | "mono" | "stereo";
   trimStartSec?: number;
   trimEndSec?: number;
   stripMetadata: boolean;
+  volumeGainDb?: number;
+  loudnessTargetLufs?: -14 | -16 | -23;
+  fadeInSec?: number;
+  fadeOutSec?: number;
   outputDir?: string;
   namingPattern: string;
   overwriteExisting: boolean;
@@ -159,6 +185,7 @@ export interface AppSettings {
   hwAccel: boolean;
   maxConcurrentVideoJobs: number;
   maxConcurrentImageJobs: number;
+  maxConcurrentAudioJobs: number;
   checkUpdates: boolean;
   autoClearCompleted?: boolean;
   customFfmpegPath?: string;
@@ -207,6 +234,20 @@ export interface FfmpegDownloadProgressEvent {
   totalBytes: number;
   stage: "downloading" | "verifying" | "extracting" | "done";
   sha256?: string;
+}
+
+export interface FfmpegLogEvent {
+  id: string;
+  type: MediaType;
+  line: string;
+}
+
+export interface FfmpegLogEntry {
+  id: string;
+  jobId: string;
+  type: MediaType;
+  line: string;
+  timestamp: number;
 }
 
 export interface MediaPreviewResponse {

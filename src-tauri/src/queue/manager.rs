@@ -13,7 +13,7 @@ use crate::error::AppError;
 use crate::ffmpeg::downloader::{detect_capabilities, resolve_binaries};
 use crate::ffmpeg::probe::{probe_image, probe_video};
 use crate::models::{
-    AppSettings, Capabilities, HistoryItem, Job, JobOptions, JobStatus,
+    AppSettings, Capabilities, FfmpegLogEvent, HistoryItem, Job, JobOptions, JobStatus,
     MediaProbeInfo, MediaType, Preset,
 };
 use crate::processors::audio::process_audio_job;
@@ -365,8 +365,9 @@ impl QueueManager {
                 .settings
                 .read()
                 .map(|s| match media_type {
-                    MediaType::Video | MediaType::Audio => s.max_concurrent_video_jobs.max(1),
+                    MediaType::Video => s.max_concurrent_video_jobs.max(1),
                     MediaType::Image => s.max_concurrent_image_jobs.max(1),
+                    MediaType::Audio => s.max_concurrent_audio_jobs.max(1),
                 })
                 .unwrap_or(1);
 
@@ -483,6 +484,18 @@ impl QueueManager {
                 let app_ev = app.clone();
                 let jid = job_id.clone();
 
+                let _ = app.emit(
+                    "ffmpeg-log",
+                    FfmpegLogEvent {
+                        id: job_id.clone(),
+                        media_type: MediaType::Image,
+                        line: format!(
+                            "[renium] Processing image: {} (format: {})",
+                            job.file_name, img_opts.output_format
+                        ),
+                    },
+                );
+
                 let join_res = tokio::task::spawn_blocking(move || {
                     process_image_job(
                         &input,
@@ -527,7 +540,9 @@ impl QueueManager {
                 let out_dir = settings_snapshot.default_output_dir.clone();
                 let probe = job.probe_info.clone();
                 let app_ev = app.clone();
+                let app_log = app.clone();
                 let jid = job_id.clone();
+                let jid_log = job_id.clone();
 
                 let res = process_video_job(
                     &job_id,
@@ -546,6 +561,16 @@ impl QueueManager {
                                 media_type: MediaType::Video,
                                 progress: pct,
                                 eta_seconds: eta,
+                            },
+                        );
+                    },
+                    |line| {
+                        let _ = app_log.emit(
+                            "ffmpeg-log",
+                            FfmpegLogEvent {
+                                id: jid_log.clone(),
+                                media_type: MediaType::Video,
+                                line: line.to_string(),
                             },
                         );
                     },
@@ -572,7 +597,9 @@ impl QueueManager {
                 let out_dir = settings_snapshot.default_output_dir.clone();
                 let probe = job.probe_info.clone();
                 let app_ev = app.clone();
+                let app_log = app.clone();
                 let jid = job_id.clone();
+                let jid_log = job_id.clone();
 
                 let res = process_audio_job(
                     &job_id,
@@ -590,6 +617,16 @@ impl QueueManager {
                                 media_type: MediaType::Audio,
                                 progress: pct,
                                 eta_seconds: eta,
+                            },
+                        );
+                    },
+                    |line| {
+                        let _ = app_log.emit(
+                            "ffmpeg-log",
+                            FfmpegLogEvent {
+                                id: jid_log.clone(),
+                                media_type: MediaType::Audio,
+                                line: line.to_string(),
                             },
                         );
                     },
@@ -647,6 +684,19 @@ impl QueueManager {
                     },
                 );
 
+                let _ = app.emit(
+                    "ffmpeg-log",
+                    FfmpegLogEvent {
+                        id: job_id.clone(),
+                        media_type,
+                        line: format!(
+                            "[renium] Saved: {} ({:.1} KB)",
+                            out_str,
+                            (output_size as f64) / 1024.0
+                        ),
+                    },
+                );
+
                 self.record_history(HistoryItem {
                     id: job_id,
                     media_type,
@@ -672,6 +722,14 @@ impl QueueManager {
     async fn finalize_failed(&self, app: &AppHandle, job: &Job, err: AppError) {
         let finished = now_ms();
         let err_msg = err.to_string();
+        let _ = app.emit(
+            "ffmpeg-log",
+            FfmpegLogEvent {
+                id: job.id.clone(),
+                media_type: job.media_type,
+                line: format!("[renium] ERROR ({}): {err_msg}", job.file_name),
+            },
+        );
         {
             let mut guard = self.queue_mutex(job.media_type).lock().await;
             if let Some(j) = guard.iter_mut().find(|x| x.id == job.id) {

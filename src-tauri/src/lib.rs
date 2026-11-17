@@ -43,6 +43,7 @@ pub fn run() {
             commands::jobs::retry_job,
             commands::jobs::keep_original,
             commands::jobs::open_output_folder,
+            commands::jobs::open_output_file,
             commands::jobs::generate_preview,
             commands::ffmpeg_setup::check_ffmpeg,
             commands::ffmpeg_setup::download_ffmpeg,

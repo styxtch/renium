@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   ChevronsLeftRight,
   Columns2,
   Crop,
   Eye,
+  Pause,
+  Play,
   RefreshCw,
   Scissors,
   SlidersHorizontal,
@@ -64,6 +67,7 @@ export function MediaPreviewModal() {
     videoJobs,
     imageJobs,
     previewJobId,
+    previewMode,
     setPreviewJobId,
     videoOptions,
     imageOptions,
@@ -98,6 +102,11 @@ export function MediaPreviewModal() {
   const [trimStartSec, setTrimStartSec] = useState<number | undefined>(undefined);
   const [trimEndSec, setTrimEndSec] = useState<number | undefined>(undefined);
   const [previewTimeSec, setPreviewTimeSec] = useState<number>(0);
+
+  const trimVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playTrimOnly, setPlayTrimOnly] = useState(false);
+  const [videoError, setVideoError] = useState(false);
 
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
   const [isDraggingSplit, setIsDraggingSplit] = useState(false);
@@ -217,7 +226,11 @@ export function MediaPreviewModal() {
     setCropWidth(activeOpts.cropWidth ?? undefined);
     setCropHeight(activeOpts.cropHeight ?? undefined);
     setAspectPreset("free");
-    setEditorTab("compare");
+    setIsPlaying(false);
+    setPlayTrimOnly(false);
+    setVideoError(false);
+    const isCompletedCompare = job.status === "completed" && !!job.outputPath;
+    setEditorTab(!isCompletedCompare && previewMode === "editor" ? "crop" : "compare");
 
     if (job.type === "video") {
       setTrimStartSec(videoOptions.trimStartSec ?? undefined);
@@ -402,14 +415,23 @@ export function MediaPreviewModal() {
             <Eye className="h-4 w-4 text-accent shrink-0" />
             <div className="min-w-0">
               <h2 className="text-sm font-semibold text-primary truncate">
-                {isCompareOnly ? "Compare Output" : "Visual Preview & Editor"} — {job.fileName}
+                {isCompareOnly
+                  ? "Compare Output"
+                  : previewMode === "editor"
+                    ? "Visual Crop & Trim"
+                    : "Visual Preview & Editor"}{" "}
+                — {job.fileName}
               </h2>
               <p className="text-[11px] text-muted">
                 {isCompareOnly
                   ? "Compare original file vs processed output on disk"
-                  : isVideo
-                    ? "Compare compressed frame, visual crop, and start/end trim timeline"
-                    : "Compare before/after compression quality and interactive crop"}
+                  : previewMode === "editor"
+                    ? isVideo
+                      ? "Adjust interactive crop area and start/end trim timeline"
+                      : "Adjust interactive crop area"
+                    : isVideo
+                      ? "Compare compressed frame, visual crop, and start/end trim timeline"
+                      : "Compare before/after compression quality and interactive crop"}
               </p>
             </div>
           </div>
@@ -426,24 +448,26 @@ export function MediaPreviewModal() {
         {/* Mode Tabs */}
         <div className="flex items-center justify-between px-5 py-2.5 border-b border-border bg-surface">
           <div className="flex items-center gap-1.5" role="tablist" aria-label="Preview editor modes">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={editorTab === "compare"}
-              onClick={() => {
-                setEditorTab("compare");
-                handleRefreshPreview();
-              }}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-medium transition-colors",
-                editorTab === "compare"
-                  ? "bg-accent text-white"
-                  : "text-secondary hover:text-primary hover:bg-hover"
-              )}
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Compare Before/After
-            </button>
+            {(isCompareOnly || previewMode !== "editor") && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={editorTab === "compare"}
+                onClick={() => {
+                  setEditorTab("compare");
+                  handleRefreshPreview();
+                }}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-medium transition-colors",
+                  editorTab === "compare"
+                    ? "bg-accent text-white"
+                    : "text-secondary hover:text-primary hover:bg-hover"
+                )}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Compare Before/After
+              </button>
+            )}
             {!isCompareOnly && (
               <button
                 type="button"
@@ -458,8 +482,10 @@ export function MediaPreviewModal() {
                 )}
               >
                 <Crop className="h-3.5 w-3.5" />
-                Visual Crop
-                {hasCustomCrop && <Badge tone="accent">Active</Badge>}
+                <span>Visual Crop</span>
+                {hasCustomCrop && editorTab !== "crop" && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent shrink-0" />
+                )}
               </button>
             )}
             {!isCompareOnly && isVideo && (
@@ -476,8 +502,10 @@ export function MediaPreviewModal() {
                 )}
               >
                 <Scissors className="h-3.5 w-3.5" />
-                Trim Timeline
-                {hasTrim && <Badge tone="accent">Active</Badge>}
+                <span>Trim Timeline</span>
+                {hasTrim && editorTab !== "trim" && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent shrink-0" />
+                )}
               </button>
             )}
           </div>
@@ -818,11 +846,89 @@ export function MediaPreviewModal() {
           )}
 
           {/* VIDEO TRIM TAB */}
-          {editorTab === "trim" && isVideo && (
+          {editorTab === "trim" && isVideo && (() => {
+            const trimVideoSrc =
+              tauri.isTauriRuntime() && !videoError ? convertFileSrc(job.inputPath) : null;
+            const effectiveStart = Math.max(0, Math.min(trimStartSec ?? 0, totalDurationSec - 0.1));
+            const effectiveEnd = Math.max(
+              effectiveStart + 0.1,
+              Math.min(trimEndSec ?? totalDurationSec, totalDurationSec)
+            );
+            const startPct = (effectiveStart / Math.max(0.1, totalDurationSec)) * 100;
+            const endPct = (effectiveEnd / Math.max(0.1, totalDurationSec)) * 100;
+            const playheadPct = Math.max(
+              0,
+              Math.min(100, (previewTimeSec / Math.max(0.1, totalDurationSec)) * 100)
+            );
+
+            const seekVideo = (sec: number) => {
+              const clamped = Math.max(0, Math.min(totalDurationSec, Math.round(sec * 10) / 10));
+              setPreviewTimeSec(clamped);
+              if (trimVideoRef.current) {
+                trimVideoRef.current.currentTime = clamped;
+              }
+            };
+
+            const handleTogglePlay = () => {
+              const vid = trimVideoRef.current;
+              if (!vid) return;
+              if (vid.paused) {
+                setPlayTrimOnly(false);
+                if (vid.currentTime >= totalDurationSec - 0.05) {
+                  vid.currentTime = 0;
+                }
+                void vid.play();
+              } else {
+                vid.pause();
+                setPlayTrimOnly(false);
+              }
+            };
+
+            const handlePlayTrimRange = () => {
+              const vid = trimVideoRef.current;
+              if (!vid) return;
+              vid.currentTime = effectiveStart;
+              setPreviewTimeSec(effectiveStart);
+              setPlayTrimOnly(true);
+              void vid.play();
+            };
+
+            return (
             <div className="space-y-4">
-              <div className="rounded-md border border-border bg-black/50 p-3 flex flex-col items-center gap-3">
-                <div className="h-56 w-full flex items-center justify-center overflow-hidden rounded bg-black/40">
-                  {preview ? (
+              <div className="rounded-md border border-border bg-elevated/60 p-3 flex flex-col items-center gap-3">
+                <div className="h-56 w-full flex items-center justify-center overflow-hidden rounded bg-black/40 relative">
+                  {trimVideoSrc ? (
+                    <video
+                      ref={trimVideoRef}
+                      src={trimVideoSrc}
+                      playsInline
+                      preload="metadata"
+                      onLoadedMetadata={() => {
+                        if (trimVideoRef.current && previewTimeSec > 0) {
+                          trimVideoRef.current.currentTime = previewTimeSec;
+                        }
+                      }}
+                      onTimeUpdate={() => {
+                        const vid = trimVideoRef.current;
+                        if (!vid) return;
+                        const t = vid.currentTime;
+                        setPreviewTimeSec(t);
+                        if (playTrimOnly && t >= effectiveEnd) {
+                          vid.pause();
+                          vid.currentTime = effectiveEnd;
+                          setPlayTrimOnly(false);
+                        }
+                      }}
+                      onPlay={() => setIsPlaying(true)}
+                      onPause={() => setIsPlaying(false)}
+                      onEnded={() => {
+                        setIsPlaying(false);
+                        setPlayTrimOnly(false);
+                      }}
+                      onError={() => setVideoError(true)}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : preview ? (
                     <img
                       src={preview.originalDataUrl}
                       alt="Frame at selected timestamp"
@@ -833,36 +939,79 @@ export function MediaPreviewModal() {
                   )}
                 </div>
 
-                {/* Scrubber bar with highlighted trim window */}
-                <div className="w-full space-y-1.5">
-                  <div className="relative h-2 rounded-full bg-elevated overflow-hidden">
-                    <div
-                      className="absolute top-0 bottom-0 bg-accent/60"
-                      style={{
-                        left: `${Math.min(100, ((trimStartSec ?? 0) / Math.max(0.1, totalDurationSec)) * 100)}%`,
-                        right: `${Math.max(
-                          0,
-                          100 -
-                            ((trimEndSec ?? totalDurationSec) /
-                              Math.max(0.1, totalDurationSec)) *
-                              100
-                        )}%`,
-                      }}
-                    />
+                {/* Dual-handle Trim Range Slider + Playhead */}
+                <div className="w-full space-y-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px] font-medium text-secondary">
+                      <span>Trim Range (Drag left &amp; right handles)</span>
+                      <span className="font-mono text-accent">
+                        {formatTimePrecise(effectiveStart)} → {formatTimePrecise(effectiveEnd)}
+                      </span>
+                    </div>
+                    <div className="relative h-7 flex items-center select-none">
+                      <div className="absolute left-0 right-0 h-2 rounded-full bg-border" />
+                      <div
+                        className="absolute h-2 rounded-full bg-accent/70"
+                        style={{
+                          left: `${startPct}%`,
+                          right: `${Math.max(0, 100 - endPct)}%`,
+                        }}
+                      />
+                      <div
+                        className="absolute top-1 bottom-1 w-0.5 bg-primary/80 pointer-events-none"
+                        style={{ left: `${playheadPct}%` }}
+                      />
+                      <input
+                        type="range"
+                        min={0}
+                        max={totalDurationSec}
+                        step={0.1}
+                        value={effectiveStart}
+                        aria-label="Trim Start Slider"
+                        onChange={(e) => {
+                          const val = Math.min(
+                            Number(e.target.value),
+                            Math.round((effectiveEnd - 0.1) * 10) / 10
+                          );
+                          setTrimStartSec(Math.max(0, val));
+                          seekVideo(Math.max(0, val));
+                        }}
+                        className="trim-range-input absolute inset-0 w-full"
+                      />
+                      <input
+                        type="range"
+                        min={0}
+                        max={totalDurationSec}
+                        step={0.1}
+                        value={effectiveEnd}
+                        aria-label="Trim End Slider"
+                        onChange={(e) => {
+                          const val = Math.max(
+                            Number(e.target.value),
+                            Math.round((effectiveStart + 0.1) * 10) / 10
+                          );
+                          setTrimEndSec(Math.min(totalDurationSec, val));
+                          seekVideo(Math.min(totalDurationSec, val));
+                        }}
+                        className="trim-range-input absolute inset-0 w-full"
+                      />
+                    </div>
                   </div>
+
+                  {/* Playhead Scrubber */}
                   <input
                     type="range"
                     min={0}
                     max={totalDurationSec}
                     step={0.1}
                     value={Math.min(previewTimeSec, totalDurationSec)}
-                    onChange={(e) => setPreviewTimeSec(Number(e.target.value))}
+                    onChange={(e) => seekVideo(Number(e.target.value))}
                     aria-label="Preview timestamp scrubber"
                     className="w-full accent-accent cursor-pointer"
                   />
                   <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted">
                     <span>
-                      Current Frame: <strong className="text-primary">{formatTimePrecise(previewTimeSec)}</strong> ({previewTimeSec.toFixed(1)}s)
+                      Current: <strong className="text-primary">{formatTimePrecise(previewTimeSec)}</strong> ({previewTimeSec.toFixed(1)}s)
                     </span>
                     <span>
                       Total: {formatTimePrecise(totalDurationSec)} • Trimmed Output:{" "}
@@ -872,6 +1021,30 @@ export function MediaPreviewModal() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  {trimVideoSrc && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={handleTogglePlay}
+                      >
+                        {isPlaying && !playTrimOnly ? (
+                          <Pause className="h-3.5 w-3.5" />
+                        ) : (
+                          <Play className="h-3.5 w-3.5" />
+                        )}
+                        <span>{isPlaying && !playTrimOnly ? "Pause" : "Play"}</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={handlePlayTrimRange}
+                      >
+                        <Play className="h-3.5 w-3.5" />
+                        <span>Play Trim</span>
+                      </Button>
+                    </>
+                  )}
                   <Button
                     size="sm"
                     variant="secondary"
@@ -898,18 +1071,20 @@ export function MediaPreviewModal() {
                   >
                     Set End to Current
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      const draft = buildDraftOptions();
-                      if (draft) void fetchPreview(job, draft, previewTimeSec);
-                    }}
-                    disabled={loading}
-                  >
-                    Preview Frame
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={handleResetTrim}>
+                  {!trimVideoSrc && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        const draft = buildDraftOptions();
+                        if (draft) void fetchPreview(job, draft, previewTimeSec);
+                      }}
+                      disabled={loading}
+                    >
+                      Preview Frame
+                    </Button>
+                  )}
+                  <Button size="sm" variant="secondary" onClick={handleResetTrim}>
                     Reset Trim
                   </Button>
                 </div>
@@ -954,7 +1129,8 @@ export function MediaPreviewModal() {
                 </label>
               </div>
             </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Footer */}

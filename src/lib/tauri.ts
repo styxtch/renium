@@ -7,6 +7,7 @@ import type {
   AudioOptions,
   Capabilities,
   FfmpegDownloadProgressEvent,
+  FfmpegLogEvent,
   FfmpegStatus,
   HistoryItem,
   ImageOptions,
@@ -38,6 +39,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   hwAccel: true,
   maxConcurrentVideoJobs: 1,
   maxConcurrentImageJobs: 4,
+  maxConcurrentAudioJobs: 2,
   checkUpdates: false,
   autoClearCompleted: false,
 };
@@ -134,6 +136,11 @@ export async function keepOriginal(id: string): Promise<void> {
 export async function openOutputFolder(path: string): Promise<void> {
   if (!isTauriRuntime()) return;
   return invoke("open_output_folder", { path });
+}
+
+export async function openOutputFile(path: string): Promise<void> {
+  if (!isTauriRuntime()) return;
+  return invoke("open_output_file", { path });
 }
 
 function buildFallbackSvgDataUrl(label: string, w: number, h: number, accent: string): string {
@@ -358,6 +365,13 @@ export async function onFfmpegDownloadProgress(
 ): Promise<UnlistenFn> {
   if (!isTauriRuntime()) return () => {};
   return listen<FfmpegDownloadProgressEvent>("ffmpeg-download-progress", (e) => cb(e.payload));
+}
+
+export async function onFfmpegLog(
+  cb: (payload: FfmpegLogEvent) => void
+): Promise<UnlistenFn> {
+  if (!isTauriRuntime()) return () => {};
+  return listen<FfmpegLogEvent>("ffmpeg-log", (e) => cb(e.payload));
 }
 
 export async function onNativeDragDrop(

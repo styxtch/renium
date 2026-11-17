@@ -101,7 +101,7 @@ export function AppPreferencesModal() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <FieldLabel htmlFor="pref-vid-conc">Concurrent Video Jobs</FieldLabel>
               <Select
@@ -115,6 +115,22 @@ export function AppPreferencesModal() {
               >
                 <option value={1}>1 (Recommended)</option>
                 <option value={2}>2</option>
+              </Select>
+            </div>
+            <div>
+              <FieldLabel htmlFor="pref-aud-conc">Concurrent Audio Jobs</FieldLabel>
+              <Select
+                id="pref-aud-conc"
+                value={settings.maxConcurrentAudioJobs}
+                onChange={(e) =>
+                  void updateSettings({
+                    maxConcurrentAudioJobs: Number(e.target.value),
+                  })
+                }
+              >
+                <option value={1}>1</option>
+                <option value={2}>2 (Recommended)</option>
+                <option value={4}>4</option>
               </Select>
             </div>
             <div>
@@ -147,14 +163,6 @@ export function AppPreferencesModal() {
                 : "No hardware encoders detected yet"
             }
           />
-
-          <SwitchToggle
-            id="pref-updates"
-            checked={settings.checkUpdates}
-            onChange={(v) => void updateSettings({ checkUpdates: v })}
-            label="Optional Update Check"
-            description="Off by default — Renium stays 100% offline unless enabled"
-          />
         </div>
 
         <div className="rounded-md bg-elevated/50 border border-border p-3.5 flex items-center justify-between gap-3">
@@ -181,7 +189,7 @@ export function AppPreferencesModal() {
         </div>
 
         <div className="pt-2 border-t border-border text-xs text-muted space-y-1">
-          <div className="font-medium text-secondary">About Renium v1.0.1</div>
+          <div className="font-medium text-secondary">About Renium v1.1.0</div>
           <p>
             Desktop offline-first media compressor powered by Rust, Tauri 2, OxiPNG, image-rs, and
             FFmpeg (LGPL/GPL components downloaded externally at first run).

@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { CheckCircle2, Pause, Play, Sparkles, Trash2, XCircle } from "lucide-react";
 import { JobItem } from "@/components/queue/JobItem";
 import { Button } from "@/components/ui/Primitives";
+import { cn } from "@/lib/utils";
 import { useJobStore } from "@/stores/jobStore";
 import type { Job, MediaType } from "@/types";
 
@@ -128,7 +129,14 @@ export function JobList({ mediaType }: { mediaType: MediaType }) {
   }
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto p-3 -m-3">
+    <div
+      className={cn(
+        "flex-1 min-h-[200px] xl:min-h-0 grid items-start gap-3 xl:overflow-y-auto p-3 -m-3",
+        activeJobs.length > 0 && outputJobs.length > 0
+          ? "grid-cols-1 xl:grid-cols-2"
+          : "grid-cols-1"
+      )}
+    >
       {activeJobs.length > 0 && (
         <section
           aria-label={
@@ -138,7 +146,7 @@ export function JobList({ mediaType }: { mediaType: MediaType }) {
                 ? "Image Queue"
                 : "Audio Queue"
           }
-          className="flex flex-col min-h-0 rounded-md border border-border bg-surface shadow-card overflow-hidden"
+          className="flex flex-col max-h-full min-h-0 rounded-md border border-border bg-surface shadow-card overflow-hidden"
         >
           <div className="px-4 py-3 border-b border-border flex flex-wrap items-center justify-between gap-2 shrink-0">
             <div className="flex items-center gap-3">
@@ -270,7 +278,7 @@ export function JobList({ mediaType }: { mediaType: MediaType }) {
       {outputJobs.length > 0 && (
         <section
           aria-label="Output List"
-          className="flex flex-col min-h-0 rounded-md border border-border bg-surface shadow-card overflow-hidden"
+          className="flex flex-col max-h-full min-h-0 rounded-md border border-border bg-surface shadow-card overflow-hidden"
         >
           <div className="px-4 py-3 border-b border-border flex flex-wrap items-center justify-between gap-2 shrink-0">
             <div className="flex items-center gap-2.5">

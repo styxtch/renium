@@ -171,6 +171,38 @@ pub fn open_output_folder(path: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
+pub fn open_output_file(path: String) -> Result<(), AppError> {
+    let target = PathBuf::from(&path);
+    if !target.exists() {
+        return Err(AppError::IoError(format!(
+            "File does not exist: {}",
+            target.display()
+        )));
+    }
+
+    #[cfg(windows)]
+    {
+        std::process::Command::new("explorer")
+            .arg(&target)
+            .spawn()?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&target)
+            .spawn()?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&target)
+            .spawn()?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn generate_preview(
     state: State<'_, AppState>,
     input_path: String,

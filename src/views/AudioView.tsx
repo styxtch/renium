@@ -1,7 +1,9 @@
 import { AlertTriangle, X } from "lucide-react";
 import { DropZone } from "@/components/queue/DropZone";
+import { FfmpegTerminalPanel } from "@/components/queue/FfmpegTerminalPanel";
 import { JobList } from "@/components/queue/JobList";
 import { AudioSettingsPanel } from "@/components/settings/AudioSettingsPanel";
+import { OutputSettingsCard } from "@/components/settings/OutputSettingsCard";
 import { Button } from "@/components/ui/Primitives";
 import { useJobStore } from "@/stores/jobStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -74,13 +76,17 @@ export function AudioView() {
       {!hasJobs ? (
         <DropZone mediaType="audio" fullHeight />
       ) : (
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-3">
-          <div className="w-full lg:flex-1 min-w-0 min-h-0 flex flex-col gap-3">
+        <div className="flex-1 min-h-0 overflow-y-auto xl:overflow-visible flex flex-col xl:grid xl:grid-cols-[1fr_310px] gap-3">
+          <div className="min-w-0 xl:min-h-0 flex flex-col gap-3">
             <DropZone mediaType="audio" fullHeight={false} />
             <JobList mediaType="audio" />
+            <AudioSettingsPanel />
           </div>
 
-          <AudioSettingsPanel />
+          <div className="xl:min-h-0 flex flex-col gap-3 xl:p-3 xl:-m-3 shrink-0 xl:shrink">
+            <OutputSettingsCard mediaType="audio" />
+            <FfmpegTerminalPanel mediaType="audio" className="xl:flex-1 xl:min-h-0" />
+          </div>
         </div>
       )}
     </div>

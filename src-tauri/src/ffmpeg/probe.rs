@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::error::AppError;
 use crate::ffmpeg::downloader::apply_no_window_std;
-use crate::models::{MediaProbeInfo, SubtitleTrack};
+use crate::models::{AudioTrack, MediaProbeInfo, SubtitleTrack};
 
 #[derive(Debug, Deserialize)]
 struct FfprobeOutput {
@@ -61,6 +61,7 @@ pub fn parse_ffprobe_json(json_str: &str) -> Result<MediaProbeInfo, AppError> {
     }
 
     let mut sub_index = 0u32;
+    let mut audio_index = 0u32;
     for stream in parsed.streams {
         match stream.codec_type.as_deref() {
             Some("video") if info.video_codec.is_none() => {
@@ -73,8 +74,17 @@ pub fn parse_ffprobe_json(json_str: &str) -> Result<MediaProbeInfo, AppError> {
                     .and_then(parse_fps_fraction)
                     .or_else(|| stream.r_frame_rate.as_deref().and_then(parse_fps_fraction));
             }
-            Some("audio") if info.audio_codec.is_none() => {
-                info.audio_codec = stream.codec_name;
+            Some("audio") => {
+                if info.audio_codec.is_none() {
+                    info.audio_codec = stream.codec_name.clone();
+                }
+                info.audio_tracks.push(AudioTrack {
+                    index: audio_index,
+                    codec: stream.codec_name,
+                    language: stream.tags.as_ref().and_then(|t| t.language.clone()),
+                    title: stream.tags.as_ref().and_then(|t| t.title.clone()),
+                });
+                audio_index += 1;
             }
             Some("subtitle") => {
                 info.subtitle_tracks.push(SubtitleTrack {

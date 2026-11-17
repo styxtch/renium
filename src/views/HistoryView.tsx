@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  ExternalLink,
   Film,
   FolderOpen,
   Image as ImageIcon,
@@ -64,11 +65,13 @@ export function HistoryView() {
 
   const filtered = useMemo(() => {
     return items.filter((item) => {
-      if (
-        searchQuery.trim() &&
-        !item.fileName.toLowerCase().includes(searchQuery.toLowerCase())
-      ) {
-        return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesName = item.fileName.toLowerCase().includes(q);
+        const matchesOutput = item.outputPath?.toLowerCase().includes(q) ?? false;
+        if (!matchesName && !matchesOutput) {
+          return false;
+        }
       }
       if (filter === "video" && item.type !== "video") return false;
       if (filter === "image" && item.type !== "image") return false;
@@ -155,11 +158,16 @@ export function HistoryView() {
             const savings = calcSavingsPercent(item.originalSize, item.outputSize);
             const isFailed = item.status === "failed";
             const isExpanded = expandedErrorId === item.id;
+            const outputFileName =
+              !isFailed && item.outputPath
+                ? (item.outputPath.split(/[\\/]/).pop() ?? item.fileName)
+                : null;
+            const showOutputName = Boolean(outputFileName && outputFileName !== item.fileName);
 
             return (
               <div
                 key={item.id}
-                className="rounded-md border border-border bg-surface p-3 space-y-2 neu-card-item"
+                className="rounded-md border border-border bg-surface p-3 space-y-2 neu-card-item transition-all duration-150 hover:bg-elevated/60 hover:-translate-y-0.5"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
@@ -173,10 +181,18 @@ export function HistoryView() {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-primary truncate">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium text-primary truncate" title={item.inputPath}>
                           {item.fileName}
                         </span>
+                        {showOutputName && (
+                          <span
+                            className="text-xs font-mono text-accent truncate"
+                            title={item.outputPath}
+                          >
+                            → {outputFileName}
+                          </span>
+                        )}
                         {isFailed ? (
                           <Badge tone="error">
                             <XCircle className="h-3 w-3" />
@@ -219,14 +235,25 @@ export function HistoryView() {
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     {!isFailed && item.outputPath && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void tauri.openOutputFolder(item.outputPath)}
-                      >
-                        <FolderOpen className="h-3.5 w-3.5" />
-                        <span>Open Folder</span>
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => void tauri.openOutputFile(item.outputPath)}
+                          title="Open file with default app"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          <span>Open File</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => void tauri.openOutputFolder(item.outputPath)}
+                        >
+                          <FolderOpen className="h-3.5 w-3.5" />
+                          <span>Open Folder</span>
+                        </Button>
+                      </>
                     )}
                     {isFailed && item.error && (
                       <Button

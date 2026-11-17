@@ -12,6 +12,7 @@ import { useHistoryStore } from "@/stores/historyStore";
 import type {
   ActiveTab,
   AudioOptions,
+  FfmpegLogEntry,
   ImageOptions,
   Job,
   MediaType,
@@ -43,6 +44,7 @@ interface JobState {
   audioJobs: Job[];
   selectedJobId: string | null;
   previewJobId: string | null;
+  previewMode: "full" | "editor";
   videoOptions: VideoOptions;
   imageOptions: ImageOptions;
   audioOptions: AudioOptions;
@@ -56,7 +58,7 @@ interface JobState {
 
   setActiveTab: (tab: ActiveTab) => void;
   setSelectedJobId: (id: string | null) => void;
-  setPreviewJobId: (id: string | null) => void;
+  setPreviewJobId: (id: string | null, mode?: "full" | "editor") => void;
   toggleJobChecked: (id: string) => void;
   setAllQueuedChecked: (mediaType: MediaType, checked: boolean) => void;
   clearNotice: () => void;
@@ -79,6 +81,8 @@ interface JobState {
   moveJob: (id: string, direction: "up" | "down", mediaType: MediaType) => Promise<void>;
   retryJob: (id: string) => Promise<void>;
   keepOriginal: (id: string, mediaType: MediaType) => Promise<void>;
+  ffmpegLogs: FfmpegLogEntry[];
+  clearFfmpegLogs: () => void;
 }
 
 export const useJobStore = create<JobState>((set, get) => ({
@@ -88,6 +92,7 @@ export const useJobStore = create<JobState>((set, get) => ({
   audioJobs: [],
   selectedJobId: null,
   previewJobId: null,
+  previewMode: "full",
   videoOptions: { ...DEFAULT_VIDEO_OPTIONS },
   imageOptions: { ...DEFAULT_IMAGE_OPTIONS },
   audioOptions: { ...DEFAULT_AUDIO_OPTIONS },
@@ -98,6 +103,8 @@ export const useJobStore = create<JobState>((set, get) => ({
   noticeTone: "info",
   mismatchOffer: null,
   uncheckedJobIds: {},
+  ffmpegLogs: [],
+  clearFfmpegLogs: () => set({ ffmpegLogs: [] }),
 
   setActiveTab: (activeTab) =>
     set({
@@ -108,7 +115,8 @@ export const useJobStore = create<JobState>((set, get) => ({
       mismatchOffer: null,
     }),
   setSelectedJobId: (selectedJobId) => set({ selectedJobId }),
-  setPreviewJobId: (previewJobId) => set({ previewJobId }),
+  setPreviewJobId: (previewJobId, mode = "full") =>
+    set({ previewJobId, previewMode: mode }),
   toggleJobChecked: (id) =>
     set((state) => {
       const next = { ...state.uncheckedJobIds };
@@ -190,9 +198,24 @@ export const useJobStore = create<JobState>((set, get) => ({
       }
     });
 
+    const unlistenLog = await tauri.onFfmpegLog((ev) => {
+      set((state) => {
+        const entry: FfmpegLogEntry = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          jobId: ev.id,
+          type: ev.type,
+          line: ev.line,
+          timestamp: Date.now(),
+        };
+        const next = [...state.ffmpegLogs, entry];
+        return { ffmpegLogs: next.length > 400 ? next.slice(next.length - 400) : next };
+      });
+    });
+
     return () => {
       unlistenProgress();
       unlistenStatus();
+      unlistenLog();
     };
   },
 

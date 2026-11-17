@@ -53,12 +53,11 @@ pub fn build_audio_ffmpeg_args(
     output_part_path: &Path,
     target_ext: &str,
     options: &AudioOptions,
+    trimmed_duration_ms: Option<u64>,
 ) -> Vec<String> {
     let mut args = vec![
         "-y".to_string(),
         "-hide_banner".to_string(),
-        "-loglevel".to_string(),
-        "error".to_string(),
     ];
 
     let start_sec = options.trim_start_sec.unwrap_or(0.0).max(0.0);
@@ -177,9 +176,30 @@ pub fn build_audio_ffmpeg_args(
         args.extend(["-map_metadata".to_string(), "-1".to_string()]);
     }
 
+    let mut af_filters = Vec::new();
+    if let Some(gain_db) = options.volume_gain_db.filter(|g| g.abs() > 0.05) {
+        af_filters.push(format!("volume={gain_db:.1}dB"));
+    }
+    if let Some(lufs) = options.loudness_target_lufs {
+        af_filters.push(format!("loudnorm=I={lufs}:TP=-1.5:LRA=11"));
+    }
+    if let Some(fade_in) = options.fade_in_sec.filter(|&d| d > 0.0) {
+        af_filters.push(format!("afade=t=in:st=0:d={fade_in:.2}"));
+    }
+    if let Some(fade_out) = options.fade_out_sec.filter(|&d| d > 0.0) {
+        if let Some(dur_ms) = trimmed_duration_ms.filter(|&ms| ms > 0) {
+            let dur_sec = (dur_ms as f64) / 1000.0;
+            let st = (dur_sec - fade_out).max(0.0);
+            af_filters.push(format!("afade=t=out:st={st:.3}:d={fade_out:.2}"));
+        }
+    }
+    if !af_filters.is_empty() {
+        args.extend(["-af".to_string(), af_filters.join(",")]);
+    }
+
     args.extend([
         "-progress".to_string(),
-        "pipe:1".to_string(),
+        "pipe:2".to_string(),
         "-nostats".to_string(),
         output_part_path.to_string_lossy().to_string(),
     ]);
@@ -187,7 +207,7 @@ pub fn build_audio_ffmpeg_args(
     args
 }
 
-pub async fn process_audio_job<F>(
+pub async fn process_audio_job<F, L>(
     job_id: &str,
     ffmpeg_path: &Path,
     input_path: &Path,
@@ -196,9 +216,11 @@ pub async fn process_audio_job<F>(
     probe: Option<&MediaProbeInfo>,
     registry: &Arc<ActiveProcessRegistry>,
     mut on_progress: F,
+    mut on_log: L,
 ) -> Result<AudioProcessResult, AppError>
 where
     F: FnMut(f64, Option<u64>),
+    L: FnMut(&str),
 {
     if !input_path.is_file() {
         return Err(AppError::IoError(format!(
@@ -228,7 +250,13 @@ where
     let part_path = part_path_for(&output_path);
     let duration_ms =
         effective_audio_trimmed_duration_ms(probe.and_then(|p| p.duration_ms), options);
-    let args = build_audio_ffmpeg_args(input_path, &part_path, &target_ext, options);
+    let args = build_audio_ffmpeg_args(input_path, &part_path, &target_ext, options, duration_ms);
+
+    let file_label = input_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("audio");
+    on_log(&format!("[renium] Starting audio job: {file_label}"));
 
     let result = run_ffmpeg_once(
         ffmpeg_path,
@@ -239,6 +267,7 @@ where
         100.0,
         registry,
         &mut on_progress,
+        &mut on_log,
     )
     .await;
 
@@ -282,13 +311,19 @@ mod tests {
             trim_start_sec: Some(5.0),
             trim_end_sec: Some(20.0),
             strip_metadata: true,
+            volume_gain_db: Some(3.5),
+            loudness_target_lufs: Some(-16),
+            fade_in_sec: Some(1.5),
+            fade_out_sec: Some(2.0),
             ..AudioOptions::default()
         };
 
         let ext = target_extension_for_audio(&input, &opts);
         assert_eq!(ext, "mp3");
 
-        let args = build_audio_ffmpeg_args(&input, &part, &ext, &opts);
+        let args = build_audio_ffmpeg_args(&input, &part, &ext, &opts, Some(15_000));
+        assert!(!args.contains(&"-loglevel".to_string()));
+        assert!(args.windows(2).any(|w| w == ["-progress", "pipe:2"]));
         assert!(args.windows(2).any(|w| w == ["-ss", "5.000"]));
         assert!(args.windows(2).any(|w| w == ["-t", "15.000"]));
         assert!(args.windows(2).any(|w| w == ["-c:a", "libmp3lame"]));
@@ -296,12 +331,17 @@ mod tests {
         assert!(args.windows(2).any(|w| w == ["-ar", "44100"]));
         assert!(args.windows(2).any(|w| w == ["-ac", "2"]));
         assert!(args.windows(2).any(|w| w == ["-map_metadata", "-1"]));
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        assert_eq!(
+            args[af_idx + 1],
+            "volume=3.5dB,loudnorm=I=-16:TP=-1.5:LRA=11,afade=t=in:st=0:d=1.50,afade=t=out:st=13.000:d=2.00"
+        );
 
         let flac_opts = AudioOptions {
             output_format: "flac".to_string(),
             ..AudioOptions::default()
         };
-        let flac_args = build_audio_ffmpeg_args(&input, &part, "flac", &flac_opts);
+        let flac_args = build_audio_ffmpeg_args(&input, &part, "flac", &flac_opts, None);
         assert!(flac_args.windows(2).any(|w| w == ["-c:a", "flac"]));
         assert!(flac_args.windows(2).any(|w| w == ["-f", "flac"]));
     }

@@ -1,5 +1,5 @@
 import { SlidersHorizontal } from "lucide-react";
-import { Button, FieldLabel, Select } from "@/components/ui/Primitives";
+import { Button, Select } from "@/components/ui/Primitives";
 import { useSettingsStore } from "@/stores/settingsStore";
 import type { ImageOptions, MediaType, Preset, VideoOptions } from "@/types";
 
@@ -23,24 +23,18 @@ export function PresetHeader({
   };
 
   return (
-    <div className="space-y-1.5 pb-3 border-b border-border">
-      <div className="flex items-center justify-between">
-        <FieldLabel htmlFor={`preset-${mediaType}`}>Preset</FieldLabel>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-6 px-2 text-xs"
-          onClick={() => setShowPresetModal(true)}
-          title="Save, import, or export presets"
-        >
-          <SlidersHorizontal className="h-3 w-3" />
-          <span>Manage / JSON</span>
-        </Button>
-      </div>
+    <div className="flex items-center gap-2 min-w-0">
+      <label
+        htmlFor={`preset-${mediaType}`}
+        className="text-xs font-medium text-secondary shrink-0"
+      >
+        Preset
+      </label>
       <Select
         id={`preset-${mediaType}`}
         value={activePresetId}
         onChange={(e) => handleChange(e.target.value)}
+        className="h-8 text-xs flex-1 min-w-[150px]"
       >
         <option value="custom" disabled>
           Custom Configuration
@@ -51,6 +45,16 @@ export function PresetHeader({
           </option>
         ))}
       </Select>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="h-8 px-2 text-xs shrink-0"
+        onClick={() => setShowPresetModal(true)}
+        title="Save, import, or export presets"
+      >
+        <SlidersHorizontal className="h-3 w-3" />
+        <span>Manage / JSON</span>
+      </Button>
     </div>
   );
 }

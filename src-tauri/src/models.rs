@@ -29,6 +29,15 @@ pub struct SubtitleTrack {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct AudioTrack {
+    pub index: u32,
+    pub codec: Option<String>,
+    pub language: Option<String>,
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct MediaProbeInfo {
     pub duration_ms: Option<u64>,
     pub width: Option<u32>,
@@ -36,6 +45,8 @@ pub struct MediaProbeInfo {
     pub fps: Option<f64>,
     pub video_codec: Option<String>,
     pub audio_codec: Option<String>,
+    #[serde(default)]
+    pub audio_tracks: Vec<AudioTrack>,
     pub subtitle_tracks: Vec<SubtitleTrack>,
 }
 
@@ -74,6 +85,34 @@ pub struct VideoOptions {
     pub subtitle_track_index: Option<u32>,
     pub external_srt_path: Option<String>,
     pub strip_metadata: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_codec: Option<String>,    // aac | opus | mp3 | copy | none
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_bitrate_kbps: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_channels: Option<String>, // original | stereo | mono
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_track_index: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_space: Option<String>,    // auto | bt709 | hdr-to-sdr
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encoder_profile: Option<String>, // auto | main | high | main10
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encoder_tune: Option<String>,   // none | film | animation | grain | fastdecode
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pix_fmt: Option<String>,        // auto | yuv420p | yuv420p10le
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deinterlace: Option<String>,    // none | yadif | bwdif
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub denoise: Option<String>,        // none | light | medium | strong
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sharpen: Option<String>,        // none | light | medium
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preserve_chapters: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fps_mode: Option<String>,       // auto | cfr | vfr
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fast_start: Option<bool>,
     pub output_dir: Option<String>,
     pub naming_pattern: String,
     pub overwrite_existing: bool,
@@ -108,6 +147,20 @@ impl Default for VideoOptions {
             subtitle_track_index: Some(0),
             external_srt_path: None,
             strip_metadata: false,
+            audio_codec: None,
+            audio_bitrate_kbps: None,
+            audio_channels: None,
+            audio_track_index: None,
+            color_space: None,
+            encoder_profile: None,
+            encoder_tune: None,
+            pix_fmt: None,
+            deinterlace: None,
+            denoise: None,
+            sharpen: None,
+            preserve_chapters: None,
+            fps_mode: None,
+            fast_start: None,
             output_dir: None,
             naming_pattern: "{name}_compressed.{ext}".to_string(),
             overwrite_existing: false,
@@ -191,6 +244,14 @@ pub struct AudioOptions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trim_end_sec: Option<f64>,
     pub strip_metadata: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub volume_gain_db: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loudness_target_lufs: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fade_in_sec: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fade_out_sec: Option<f64>,
     pub output_dir: Option<String>,
     pub naming_pattern: String,
     pub overwrite_existing: bool,
@@ -206,6 +267,10 @@ impl Default for AudioOptions {
             trim_start_sec: None,
             trim_end_sec: None,
             strip_metadata: false,
+            volume_gain_db: None,
+            loudness_target_lufs: None,
+            fade_in_sec: None,
+            fade_out_sec: None,
             output_dir: None,
             naming_pattern: "{name}_compressed.{ext}".to_string(),
             overwrite_existing: false,
@@ -280,6 +345,7 @@ pub struct AppSettings {
     pub hw_accel: bool,
     pub max_concurrent_video_jobs: usize,
     pub max_concurrent_image_jobs: usize,
+    pub max_concurrent_audio_jobs: usize,
     pub check_updates: bool,
     pub auto_clear_completed: bool,
     pub custom_ffmpeg_path: Option<String>,
@@ -293,6 +359,7 @@ impl Default for AppSettings {
             hw_accel: true,
             max_concurrent_video_jobs: 1,
             max_concurrent_image_jobs: 4,
+            max_concurrent_audio_jobs: 2,
             check_updates: false,
             auto_clear_completed: false,
             custom_ffmpeg_path: None,
@@ -339,4 +406,13 @@ pub struct MediaPreviewResponse {
     pub duration_ms: Option<u64>,
     pub preview_time_sec: f64,
     pub processed_format: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FfmpegLogEvent {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub media_type: MediaType,
+    pub line: String,
 }

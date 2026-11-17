@@ -6,6 +6,34 @@ All media processing runs 100% locally on your machine — no cloud uploads, no 
 
 ---
 
+## Screenshots
+
+<p align="center">
+  <img src="Docs/screenshots/video-workspace.png" alt="Renium Video Workspace" width="100%" />
+</p>
+
+<details>
+<summary>More screenshots (Audio, Image, Visual Preview &amp; History)</summary>
+
+<p align="center">
+  <img src="Docs/screenshots/audio-workspace.png" alt="Audio Workspace &amp; Trim" width="49%" />
+  <img src="Docs/screenshots/image-workspace.png" alt="Image Workspace &amp; Processing Log" width="49%" />
+</p>
+
+<p align="center">
+  <img src="Docs/screenshots/visual-preview-crop.png" alt="Visual Preview &amp; Crop Editor" width="49%" />
+  <img src="Docs/screenshots/visual-trim-timeline.png" alt="Visual Trim Timeline" width="49%" />
+</p>
+
+<p align="center">
+  <img src="Docs/screenshots/history-view.png" alt="History &amp; Space Saved Statistics" width="49%" />
+  <img src="Docs/screenshots/dark-mode.png" alt="Dark Mode / Modern Card Theme" width="49%" />
+</p>
+
+</details>
+
+---
+
 ## Features
 
 - **Video Compression & Conversion**: H.264, H.265 (HEVC), VP9, AV1; output to MP4, MKV, MOV, WebM, animated GIF, or audio extraction (MP3 / AAC); CRF / Target Bitrate / Two-Pass rate control; hardware acceleration auto-detection (NVENC, QSV, AMF, VideoToolbox, VAAPI); subtitles (`keep`, `strip`, `burn-in`, `extract-srt`).
@@ -42,6 +70,17 @@ Renium/
     ├── src/queue/              # QueueManager, bounded concurrency, OS pause/resume
     └── src/storage/            # JSON persistence in AppData (settings, presets, history, recovery)
 ```
+
+---
+
+## Installation
+
+### End Users (Pre-built Installer)
+1. Download the latest installer for your OS from the **Releases** page:
+   - **Windows**: `.msi` or `.exe` (NSIS)
+   - **macOS**: `.dmg`
+   - **Linux**: `.AppImage` or `.deb`
+2. Launch **Renium**. On first run, the app will prompt you to download **FFmpeg & FFprobe** (verified via SHA-256) into `AppData`, or you can point it to an existing local `ffmpeg` / `ffprobe` binary.
 
 ---
 
@@ -88,8 +127,8 @@ Press `?` or `F1` anywhere in the app (or click the keyboard icon in the sidebar
 | Shortcut | Action |
 |---|---|
 | `Ctrl + 1` / `Cmd + 1` | Switch to Video workspace |
-| `Ctrl + 2` / `Cmd + 2` | Switch to Image workspace |
-| `Ctrl + 3` / `Cmd + 3` | Switch to Audio workspace |
+| `Ctrl + 2` / `Cmd + 2` | Switch to Audio workspace |
+| `Ctrl + 3` / `Cmd + 3` | Switch to Image workspace |
 | `Ctrl + 4` / `Cmd + 4` | Switch to History view |
 | `Ctrl + ,` / `Cmd + ,` | Open App Preferences |
 | `?` or `F1` | Toggle Keyboard Shortcuts dialog |
@@ -169,11 +208,14 @@ You can save, export, or import custom presets via **Preset → Manage / JSON** 
   - `encoderPreset`: `"ultrafast" | "superfast" | "veryfast" | "faster" | "fast" | "medium" | "slow" | "slower" | "veryslow" | "placebo"`
   - `hwAccel` (boolean)
   - `resolution`: `"original" | "1080p" | "720p" | "480p" | "custom"`, `customWidth`, `customHeight`
-  - `fps`: `"original" | 60 | 30 | 24 | "custom"`, `customFps`
+  - `fps`: `"original" | 60 | 30 | 24 | "custom"`, `customFps`, `fpsMode`: `"auto" | "cfr" | "vfr"`
   - `rotate`: `0 | 90 | 180 | 270`, `flipHorizontal`, `flipVertical`
   - `trimStartSec`, `trimEndSec`, `cropX`, `cropY`, `cropWidth`, `cropHeight`, `extractThumbnailSec`
+  - `deinterlace`: `"none" | "yadif" | "bwdif"`, `denoise`: `"none" | "light" | "medium" | "strong"`, `sharpen`: `"none" | "light" | "medium"`
+  - `audioCodec`: `"aac" | "opus" | "mp3" | "copy" | "none"`, `audioBitrateKbps`, `audioChannels`: `"original" | "stereo" | "mono"`, `audioTrackIndex`
   - `subtitleMode`: `"keep" | "strip" | "burn-in" | "extract-srt"`, `subtitleTrackIndex`, `externalSrtPath`
-  - `stripMetadata` (boolean), `outputDir`, `namingPattern`, `overwriteExisting` (boolean)
+  - `colorSpace`: `"auto" | "bt709" | "hdr-to-sdr"`, `encoderProfile`: `"auto" | "main" | "high" | "main10"`, `encoderTune`: `"none" | "film" | "animation" | "grain" | "fastdecode"`, `pixFmt`: `"auto" | "yuv420p" | "yuv420p10le"`
+  - `preserveChapters` (boolean), `fastStart` (boolean), `stripMetadata` (boolean), `outputDir`, `namingPattern`, `overwriteExisting` (boolean)
 - **Image (`type: "image"`)**:
   - `outputFormat`: `"original" | "jpg" | "png" | "webp" | "avif" | "gif" | "tiff"`
   - `quality` (1–100), `pngOptimizationLevel` (1–6), `pngZopfli`, `progressiveJpeg`, `effort`, `lossless`
@@ -182,9 +224,10 @@ You can save, export, or import custom presets via **Preset → Manage / JSON** 
   - `cropX`, `cropY`, `cropWidth`, `cropHeight`
   - `metadataMode`: `"keep-all" | "strip-all" | "keep-orientation"`, `outputDir`, `namingPattern`, `overwriteExisting`
 - **Audio (`type: "audio"`)**:
-  - `outputFormat`: `"original" | "mp3" | "aac" | "m4a" | "wav" | "flac" | "ogg"`
+  - `outputFormat`: `"original" | "mp3" | "aac" | "m4a" | "wav" | "flac" | "ogg" | "opus"`
   - `bitrateKbps` (number), `sampleRate`: `"original" | 44100 | 48000`, `channels`: `"original" | "mono" | "stereo"`
-  - `trimStartSec`, `trimEndSec`, `stripMetadata` (boolean), `outputDir`, `namingPattern`, `overwriteExisting`
+  - `trimStartSec`, `trimEndSec`, `volumeGainDb`, `loudnessTargetLufs`: `-14 | -16 | -23`, `fadeInSec`, `fadeOutSec`
+  - `stripMetadata` (boolean), `outputDir`, `namingPattern`, `overwriteExisting`
 
 </details>
 

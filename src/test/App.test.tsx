@@ -19,6 +19,7 @@ vi.mock("@/lib/tauri", async () => {
       hwAccel: true,
       maxConcurrentVideoJobs: 1,
       maxConcurrentImageJobs: 4,
+      maxConcurrentAudioJobs: 2,
       checkUpdates: false,
     }),
     getPresets: vi.fn().mockResolvedValue(presets),
@@ -43,11 +44,13 @@ vi.mock("@/lib/tauri", async () => {
     startQueue: vi.fn().mockResolvedValue(undefined),
     updateQueuedJobsOptions: vi.fn().mockResolvedValue(undefined),
     keepOriginal: vi.fn().mockResolvedValue(undefined),
+    openOutputFile: vi.fn().mockResolvedValue(undefined),
     savePreset: vi.fn().mockImplementation(async (p) => [...presets, p]),
     exportPresetsJson: vi.fn().mockResolvedValue(JSON.stringify(presets)),
     importPresetsJson: vi.fn().mockResolvedValue(presets),
     onJobProgress: vi.fn().mockResolvedValue(() => {}),
     onJobStatusChanged: vi.fn().mockResolvedValue(() => {}),
+    onFfmpegLog: vi.fn().mockResolvedValue(() => {}),
     onNativeDragDrop: vi.fn().mockResolvedValue(() => {}),
     generatePreview: vi.fn().mockImplementation(async (p, mt, opts, sec, out) =>
       actual.generatePreview(p, mt, opts, sec, out)
@@ -77,6 +80,7 @@ describe("Renium UI & Workflows", () => {
       noticeTone: "info",
       mismatchOffer: null,
       uncheckedJobIds: {},
+      ffmpegLogs: [],
     });
     useHistoryStore.setState({
       items: [],
@@ -125,13 +129,13 @@ describe("Renium UI & Workflows", () => {
       expect(screen.getByText("Drop video files or folders here")).toBeInTheDocument();
     });
 
-    // Switch via Ctrl+2 -> Image tab
+    // Switch via Ctrl+2 -> Audio tab
     fireEvent.keyDown(window, { key: "2", ctrlKey: true });
-    expect(screen.getByText("Drop images or folders here")).toBeInTheDocument();
-
-    // Switch via Ctrl+3 -> Audio tab
-    fireEvent.keyDown(window, { key: "3", ctrlKey: true });
     expect(screen.getByText("Drop audio files or folders here")).toBeInTheDocument();
+
+    // Switch via Ctrl+3 -> Image tab
+    fireEvent.keyDown(window, { key: "3", ctrlKey: true });
+    expect(screen.getByText("Drop images or folders here")).toBeInTheDocument();
 
     // Switch via Ctrl+4 -> History tab
     fireEvent.keyDown(window, { key: "4", ctrlKey: true });
@@ -195,8 +199,7 @@ describe("Renium UI & Workflows", () => {
       (screen.getByLabelText("Preset") as HTMLSelectElement).value
     ).toBe("builtin-image-keep-original");
 
-    // Switching to Convert tab and changing target format to PNG dynamically updates CTA to Convert to PNG (1)
-    fireEvent.click(screen.getByRole("button", { name: /^Convert$/i }));
+    // Changing target format to PNG dynamically updates CTA to Convert to PNG (1)
     fireEvent.click(screen.getByRole("button", { name: /^PNG$/i }));
     const convertBtn = screen.getByRole("button", { name: /Convert to PNG \(1\)/i });
     expect(convertBtn).toBeEnabled();
@@ -206,9 +209,15 @@ describe("Renium UI & Workflows", () => {
       expect(tauri.startQueue).toHaveBeenCalledWith("image");
     });
 
-    // Verify Keep Original button appears on bloated output
+    // Verify Keep Original button appears on bloated output and opens confirmation modal
     const keepOrigBtn = screen.getByRole("button", { name: /Keep Original/i });
     fireEvent.click(keepOrigBtn);
+
+    const confirmDialog = await screen.findByRole("dialog", { name: /Confirm Keep Original/i });
+    expect(confirmDialog).toBeInTheDocument();
+    expect(tauri.keepOriginal).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /Delete Output/i }));
 
     await waitFor(() => {
       expect(tauri.keepOriginal).toHaveBeenCalledWith("img-2");
@@ -637,9 +646,10 @@ describe("Renium UI & Workflows", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Resize & Crop/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Open Visual Preview & Editor/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Visual Crop$/i }));
     await waitFor(() => {
-      expect(screen.getByRole("dialog", { name: /Visual Preview & Editor/i })).toBeInTheDocument();
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText(/Visual Crop & Trim — photo\.png/i)).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("tab", { name: /Visual Crop/i }));
     fireEvent.click(screen.getByRole("button", { name: "1:1" }));
@@ -739,20 +749,16 @@ describe("Renium UI & Workflows", () => {
       expect(screen.getByRole("complementary", { name: "Image Settings" })).toBeInTheDocument();
     });
     expect(screen.getByText(/Image Queue \(1\)/i)).toBeInTheDocument();
-    expect(screen.getByText("What do you want to do?")).toBeInTheDocument();
     expect(screen.getByLabelText("Compression Quality")).toBeInTheDocument();
-    expect(screen.queryByText("Target Format")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Resize Mode")).not.toBeInTheDocument();
-
-    // Switch between task tabs inside Image Settings
-    fireEvent.click(screen.getByRole("button", { name: /^Convert$/i }));
     expect(screen.getByText("Target Format")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^WebP$/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Resize Mode")).not.toBeInTheDocument();
 
+    // Switch between Image and Resize & Crop tabs inside Image Settings
     fireEvent.click(screen.getByRole("button", { name: /Resize & Crop/i }));
     expect(screen.getByLabelText("Resize Mode")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /^Compress$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Image$/i }));
     expect(screen.getByLabelText("Compression Quality")).toBeInTheDocument();
   });
 
@@ -839,12 +845,28 @@ describe("Renium UI & Workflows", () => {
     expect(within(queueSection).queryByText("out1.mp4")).not.toBeInTheDocument();
 
     expect(within(outputSection).getByText("out1.mp4")).toBeInTheDocument();
+    expect(within(outputSection).getByText("→ out1_compressed.mp4")).toBeInTheDocument();
     expect(within(outputSection).getByText("out2.mp4")).toBeInTheDocument();
+    expect(within(outputSection).getByText("→ out2_compressed.mp4")).toBeInTheDocument();
     expect(within(outputSection).queryByText("q1.mp4")).not.toBeInTheDocument();
 
     expect(
       within(queueSection).getByRole("button", { name: /Preview q1\.mp4/i })
     ).toBeInTheDocument();
+    fireEvent.click(within(queueSection).getByRole("button", { name: /Open q1\.mp4/i }));
+    expect(tauri.openOutputFile).toHaveBeenCalledWith(queuedJob.inputPath);
+
+    const outputOpenButtons = within(outputSection).getAllByRole("button", { name: /Open output file/i });
+    fireEvent.click(outputOpenButtons[0]);
+    expect(tauri.openOutputFile).toHaveBeenCalledWith(doneJob1.outputPath);
+
+    const terminalRegion = screen.getByRole("region", { name: "FFmpeg Terminal" });
+    expect(terminalRegion).toHaveClass("xl:flex-1");
+    fireEvent.click(within(terminalRegion).getByRole("button", { name: "Collapse FFmpeg Console" }));
+    expect(terminalRegion).not.toHaveClass("xl:flex-1");
+    fireEvent.click(within(terminalRegion).getByRole("button", { name: "Expand FFmpeg Console" }));
+    expect(terminalRegion).toHaveClass("xl:flex-1");
+
     expect(
       within(outputSection).queryByRole("button", { name: /Preview out1\.mp4/i })
     ).not.toBeInTheDocument();
@@ -979,10 +1001,6 @@ describe("Renium UI & Workflows", () => {
       expect(screen.getByText("podcast.wav")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Convert" }));
-    expect((screen.getByLabelText("Naming Pattern") as HTMLInputElement).value).toBe(
-      "{name}_converted.{ext}"
-    );
     const flacBtn = screen.getByRole("button", { name: "FLAC" });
     fireEvent.click(flacBtn);
 
@@ -993,10 +1011,17 @@ describe("Renium UI & Workflows", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Trim" }));
+    fireEvent.click(screen.getByRole("button", { name: /Trim & Effects/i }));
     expect((screen.getByLabelText("Naming Pattern") as HTMLInputElement).value).toBe(
       "{name}_trimmed.{ext}"
     );
+    fireEvent.change(screen.getByLabelText("Loudness Target"), { target: { value: "-16" } });
+    await waitFor(() => {
+      expect(tauri.updateQueuedJobsOptions).toHaveBeenCalledWith(
+        "audio",
+        expect.objectContaining({ loudnessTargetLufs: -16 })
+      );
+    });
 
     const startBtn = screen.getByRole("button", { name: /Convert to FLAC \(1\)/i });
     fireEvent.click(startBtn);
@@ -1004,5 +1029,124 @@ describe("Renium UI & Workflows", () => {
     await waitFor(() => {
       expect(tauri.startQueue).toHaveBeenCalledWith("audio");
     });
+  });
+
+  it("streams FFmpeg console logs into FfmpegTerminalPanel and allows clearing them", async () => {
+    vi.mocked(tauri.checkFfmpegStatus).mockResolvedValue({ installed: true, version: "7.0" });
+    let emitLog: ((ev: { id: string; type: "video" | "image" | "audio"; line: string }) => void) | null =
+      null;
+    vi.mocked(tauri.onFfmpegLog).mockImplementation(async (cb) => {
+      emitLog = cb;
+      return () => {};
+    });
+
+    const vidJob: Job = {
+      id: "vid-log-1",
+      type: "video",
+      inputPath: "C:\\videos\\clip.mp4",
+      fileName: "clip.mp4",
+      originalSize: 5_000_000,
+      progress: 0,
+      status: "processing",
+      options: DEFAULT_VIDEO_OPTIONS,
+      createdAt: 1000,
+    };
+    vi.mocked(tauri.getJobs).mockImplementation(async (mt) =>
+      mt === "video" ? [vidJob] : []
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText("FFmpeg Console")).toBeInTheDocument();
+      expect(emitLog).not.toBeNull();
+    });
+
+    emitLog!({
+      id: "vid-log-1",
+      type: "video",
+      line: "frame=  120 fps= 60.0 q=23.0 size=    1024kB time=00:00:02.00 bitrate=4194.3kbits/s speed=2.0x",
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/speed=2\.0x/)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear FFmpeg logs" }));
+    expect(screen.queryByText(/speed=2\.0x/)).not.toBeInTheDocument();
+  });
+
+  it("exposes HandBrake-style Video tabs (Filters, Audio, Chapters, Advanced) and updates options", async () => {
+    vi.mocked(tauri.checkFfmpegStatus).mockResolvedValue({ installed: true, version: "7.0" });
+    const vidJob: Job = {
+      id: "vid-adv-1",
+      type: "video",
+      inputPath: "C:\\videos\\movie.mp4",
+      fileName: "movie.mp4",
+      originalSize: 20_000_000,
+      progress: 0,
+      status: "queued",
+      options: DEFAULT_VIDEO_OPTIONS,
+      createdAt: 1000,
+    };
+    vi.mocked(tauri.getJobs).mockImplementation(async (mt) =>
+      mt === "video" ? [vidJob] : []
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText("movie.mp4")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    fireEvent.change(screen.getByLabelText("Deinterlace"), { target: { value: "yadif" } });
+    fireEvent.change(screen.getByLabelText("Color Space / HDR"), {
+      target: { value: "hdr-to-sdr" },
+    });
+
+    await waitFor(() => {
+      expect(tauri.updateQueuedJobsOptions).toHaveBeenCalledWith(
+        "video",
+        expect.objectContaining({ deinterlace: "yadif", colorSpace: "hdr-to-sdr" })
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Audio" }));
+    fireEvent.change(screen.getByLabelText("Audio Track"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("Audio Codec"), { target: { value: "opus" } });
+
+    await waitFor(() => {
+      expect(tauri.updateQueuedJobsOptions).toHaveBeenCalledWith(
+        "video",
+        expect.objectContaining({ audioCodec: "opus", audioTrackIndex: 1 })
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.change(screen.getByLabelText("Encoder Profile"), { target: { value: "high" } });
+
+    await waitFor(() => {
+      expect(tauri.updateQueuedJobsOptions).toHaveBeenCalledWith(
+        "video",
+        expect.objectContaining({ encoderProfile: "high" })
+      );
+    });
+
+    // Opening Visual Crop & Trim from Picture & Trim hides Compare Before/After and supports dual-handle sliders
+    fireEvent.click(screen.getByRole("button", { name: "Picture & Trim" }));
+    fireEvent.click(screen.getByRole("button", { name: /Visual Crop & Trim/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText(/Visual Crop & Trim — movie\.mp4/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("tab", { name: /Compare Before\/After/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Trim Timeline/i }));
+    fireEvent.change(screen.getByLabelText("Trim Start Slider"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("Trim End Slider"), { target: { value: "15" } });
+    expect((screen.getByLabelText("Trim Start Seconds") as HTMLInputElement).value).toBe("3");
+    expect((screen.getByLabelText("Trim End Seconds") as HTMLInputElement).value).toBe("15");
   });
 });
